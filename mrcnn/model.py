@@ -236,7 +236,7 @@ def dense_conv(input_tensor, growth_rate, stage, block, use_bias=False, train_bn
 
     x = BatchNorm(name=bn_name_base + '_b')(x, training=train_bn)
     x = KL.Activation('relu', name=relu_name_base + '_b', )(x)
-    x = KL.Conv2D(growth_rate, (3, 3), use_bias=use_bias, name=conv_name_base + '_b')(x)
+    x = KL.Conv2D(growth_rate, (3, 3), padding='same', use_bias=use_bias, name=conv_name_base + '_b')(x)
 
     x = KL.Concatenate(name='concat{}_{}'.format(stage, block))([x, input_tensor])
 
