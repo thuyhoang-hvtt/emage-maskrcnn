@@ -124,7 +124,7 @@ def identity_block(input_tensor, kernel_size, filters, stage, block,
     x = BatchNorm(name=bn_name_base + '2c')(x, training=train_bn)
 
     x = KL.Add()([x, input_tensor])
-    x = KL.Activation('relu', name='res' + str(stage) + block + '_out')(x)
+    x = KL.Activation('relu', name='res' + str(stage) + block + 'id_out')(x)
     return x
 
 
@@ -143,8 +143,8 @@ def conv_block(input_tensor, kernel_size, filters, stage, block,
     And the shortcut should have subsample=(2,2) as well
     """
     nb_filter1, nb_filter2, nb_filter3 = filters
-    conv_name_base = 'res' + str(stage) + block + '_branch'
-    bn_name_base = 'bn' + str(stage) + block + '_branch'
+    conv_name_base = 'res' + str(stage) + block + '_conv'
+    bn_name_base = 'bn' + str(stage) + block + '_conv'
 
     x = KL.Conv2D(nb_filter1, (1, 1), strides=strides,
                   name=conv_name_base + '2a', use_bias=use_bias)(input_tensor)
@@ -165,7 +165,7 @@ def conv_block(input_tensor, kernel_size, filters, stage, block,
     shortcut = BatchNorm(name=bn_name_base + '1')(shortcut, training=train_bn)
 
     x = KL.Add()([x, shortcut])
-    x = KL.Activation('relu', name='res' + str(stage) + block + '_out')(x)
+    x = KL.Activation('relu', name='res' + str(stage) + block + 'conv_out')(x)
     return x
 
 
@@ -195,7 +195,7 @@ def resnet_graph(input_image, architecture, stage5=False, train_bn=True):
     x = conv_block(x, 3, [256, 256, 1024], stage=4, block='a', train_bn=train_bn)
     block_count = {"resnet50": 5, "resnet101": 22, "resnet152": 35}[architecture]
     for i in range(block_count):
-        block = chr(98 + i) if 65 + i > 90 else chr(65 + i)
+        block = chr(71 + i) if 65 + i > 90 else chr(65 + i)
         x = identity_block(x, 3, [256, 256, 1024], stage=4, block=block, train_bn=train_bn)
     C4 = x
     # Stage 5
@@ -278,7 +278,7 @@ def dense_block(input, layers, stage, growth_rate, use_bias=False, train_bn=True
     """
     x = input
     for i in range(layers):
-        block = chr(98 + i) if 65 + i > 90 else chr(65 + i)
+        block = chr(71 + i) if 65 + i > 90 else chr(65 + i)
         x = dense_conv(x, growth_rate, stage, block, use_bias, train_bn)
 
     return x
@@ -2270,37 +2270,27 @@ class MaskRCNN():
         """Downloads ImageNet trained weights from Keras.
         Returns path to weights file.
         """
+        import re
+
+        BASE_WEIGTHS_PATH = (
+            'https://github.com/keras-team/keras-applications/releases/download/' + re.split(r'\d+', self.config.BACKBONE)[0] + '/')
+        POST_FIX = '_weights_tf_dim_ordering_tf_kernels_notop.h5'
+        HASHES = {
+            'resnet50': '4d473c1dd8becc155b73f8504c6f6626',
+            'resnet101': '88cf7a10940856eca736dc7b7e228a21',
+            'resnet152': 'ee4c566cf9a93f14d82f913c2dc6dd0c',
+            'densenet121': '30ee3e1110167f948a6b9946edeeb738',
+            'densenet169': 'b8c4d4c20dd625c148057b9ff1c1176b',
+            'densenet201': 'c13680b51ded0fb44dff2d8f86ac8bb1'
+        }
+
         from keras.utils.data_utils import get_file
-        if "resnet" in self.config.BACKBONE:
-            TF_WEIGHTS_PATH_NO_TOP = 'https://github.com/fchollet/deep-learning-models/'\
-                                     'releases/download/v0.2/'\
-                                     'resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5'
-            weights_path = get_file('resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5',
-                                    TF_WEIGHTS_PATH_NO_TOP,
-                                    cache_subdir='models',
-                                    md5_hash='a268eb855778b3df3c7506639542a6af')
-        elif "densenet" in self.config.BACKBONE:
-            BASE_WEIGTHS_PATH = (
-                'https://github.com/keras-team/keras-applications/releases/download/densenet/')
-            POST_FIX = '_weights_tf_dim_ordering_tf_kernels_notop.h5'
-            if self.config.BACKBONE == "densenet121":
-                weights_path = get_file(
-                    'densenet121' + POST_FIX,
-                    BASE_WEIGTHS_PATH + 'densenet121' + POST_FIX,
-                    cache_subdir='models',
-                    file_hash='30ee3e1110167f948a6b9946edeeb738')
-            elif self.config.BACKBONE == "densenet169":
-                weights_path = get_file(
-                    'densenet169' + POST_FIX,
-                    BASE_WEIGTHS_PATH + 'densenet169' + POST_FIX,
-                    cache_subdir='models',
-                    file_hash='b8c4d4c20dd625c148057b9ff1c1176b')
-            elif self.config.BACKBONE == "densenet201":
-                weights_path = get_file(
-                    'densenet169' + POST_FIX,
-                    BASE_WEIGTHS_PATH + 'densenet169' + POST_FIX,
-                    cache_subdir='models',
-                    file_hash='c13680b51ded0fb44dff2d8f86ac8bb1')
+
+        weights_path = get_file(
+            self.config.BACKBONE + POST_FIX,
+            BASE_WEIGTHS_PATH + self.config.BACKBONE + POST_FIX,
+            cache_subdir='models',
+            file_hash=HASHES[self.config.BACKBONE])
 
         return weights_path
 

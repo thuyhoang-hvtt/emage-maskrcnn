@@ -51,13 +51,37 @@ COCO_WEIGHTS_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
 # Directory to save logs and model checkpoints, if not provided
 # through the command line argument --logs
 DEFAULT_LOGS_DIR = os.path.join(ROOT_DIR, "logs")
+DEFAULT_BACKBONE = "resnet50"
+
 
 ############################################################
 #  Configurations
 ############################################################
 
 
-class CustomConfig(Config):
+class ResnetConfig(Config):
+    """Configuration for training on the toy  dataset.
+    Derives from the base Config class and overrides some values.
+    """
+
+    # Give the configuration a recognizable name
+    NAME = "damage"
+
+    # We use a GPU with 12GB memory, which can fit two images.
+    # Adjust down if you use a smaller GPU.
+    IMAGES_PER_GPU = 2
+
+    # Number of classes (including background)
+    NUM_CLASSES = 1 + 1  # Background + toy
+
+    # Number of training steps per epoch
+    STEPS_PER_EPOCH = 100
+
+    # Skip detections with < 90% confidence
+    DETECTION_MIN_CONFIDENCE = 0.9
+
+
+class DenseNetConfig(Config):
     """Configuration for training on the toy  dataset.
     Derives from the base Config class and overrides some values.
     """
@@ -76,6 +100,10 @@ class CustomConfig(Config):
 
     # Skip detections with < 90% confidence
     DETECTION_MIN_CONFIDENCE = 0.9
+
+    # Growth rate k
+    DENSE_GROWTH_RATE = 32
+
 
 
 ############################################################
@@ -110,7 +138,7 @@ class CustomDataset(utils.Dataset):
         #   },
         #   'size': 100202
         # }
-        
+
         # We mostly care about the x and y coordinates of each region
         annotations_json = json.load(open(os.path.join(dataset_dir, "via_region_data.json")))
         # print(annotations_json)
@@ -139,7 +167,7 @@ class CustomDataset(utils.Dataset):
                 "damage",  ## for a single class just add the name here
                 image_id=a['filename'],  # use file name as a unique image id
                 path=image_path,
-                width=width, 
+                width=width,
                 height=height,
                 polygons=polygons)
 
@@ -272,14 +300,13 @@ def detect_and_color_splash(model, image_path=None, video_path=None):
         vwriter.release()
     print("Saved to ", file_name)
 
+
 ############################################################
 #  Training
 ############################################################
 
 if __name__ == '__main__':
     import argparse
-    
-    print('Procesing..')
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(
@@ -293,6 +320,10 @@ if __name__ == '__main__':
     parser.add_argument('--weights', required=True,
                         metavar="/path/to/weights.h5",
                         help="Path to weights .h5 file or 'coco'")
+    parser.add_argument('--backbone', required=False,
+                        default=DEFAULT_BACKBONE,
+                        metavar="one of [resnet50, resnet101, resnet152, densenet121, densenet169, densenet201]",
+                        help='name of backbone or resnet50')
     parser.add_argument('--logs', required=False,
                         default=DEFAULT_LOGS_DIR,
                         metavar="/path/to/logs/",
@@ -309,8 +340,8 @@ if __name__ == '__main__':
     if args.command == "train":
         assert args.dataset, "Argument --dataset is required for training"
     elif args.command == "splash":
-        assert args.image or args.video,\
-               "Provide --image or --video to apply color splash"
+        assert args.image or args.video, \
+            "Provide --image or --video to apply color splash"
 
     print("Weights: ", args.weights)
     print("Dataset: ", args.dataset)
@@ -318,23 +349,26 @@ if __name__ == '__main__':
 
     # Configurations
     if args.command == "train":
-        config = CustomConfig()
+        config = ResnetConfig() if "resnet" in args.backbone else DenseNetConfig()
+        config.BACKBONE = args.backbone
     else:
-        class InferenceConfig(CustomConfig):
+        class InferenceConfig(ResnetConfig if "resnet" in args.backbone else DenseNetConfig):
             # Set batch size to 1 since we'll be running inference on
             # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
             GPU_COUNT = 1
             IMAGES_PER_GPU = 1
+
+
         config = InferenceConfig()
     config.display()
 
     # Create model
     if args.command == "train":
         model = modellib.MaskRCNN(mode="training", config=config,
-                                  model_dir=args.logs)
+                                  model_dir=args.logs + '/' + config.BACKBONE)
     else:
         model = modellib.MaskRCNN(mode="inference", config=config,
-                                  model_dir=args.logs)
+                                  model_dir=args.logs + '/' + config.BACKBONE)
 
     # Select weights file to load
     if args.weights.lower() == "coco":
