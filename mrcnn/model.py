@@ -26,6 +26,7 @@ import keras.models as KM
 import pdb
 
 from mrcnn import utils
+from mrcnn import efficientnet as Efn
 
 # Requires TensorFlow 1.3+ and Keras 2.0.8+.
 from distutils.version import LooseVersion
@@ -211,9 +212,6 @@ def resnet_graph(input_image, architecture, stage5=False, train_bn=True):
 ############################################################
 #  DenseNet Graph
 ############################################################
-
-# Code adopted from:
-# https://github.com/fchollet/deep-learning-models/blob/master/resnet50.py
 
 def dense_conv(input_tensor, growth_rate, stage, block, use_bias=False, train_bn=True):
     """
@@ -971,8 +969,7 @@ def rpn_graph(feature_map, anchors_per_location, anchor_stride):
         lambda t: tf.reshape(t, [tf.shape(t)[0], -1, 2]))(x)
 
     # Softmax on last dimension of BG/FG.
-    rpn_probs = KL.Activation(
-        "softmax", name="rpn_class_xxx")(rpn_class_logits)
+    rpn_probs = KL.Activation(  "softmax", name="rpn_class_xxx")(rpn_class_logits)
 
     # Bounding box refinement. [batch, H, W, anchors per location, depth]
     # where depth is [x, y, log(w), log(h)]
@@ -2026,6 +2023,8 @@ class MaskRCNN():
             }
             _, C2, C3, C4, C5 = dense_graph(input_image, config.BACKBONE, densenets[config.BACKBONE],
                                             config.DENSE_GROWTH_RATE)
+        elif "efficientnet" in config.BACKBONE:
+            _, C2, C3, C4, C5 = Efn.efficient_graph(**Efn.EFFICIENT_ARCHITECTURES[config.BACKBONE])[-5:]
 
         # pdb.set_trace()
 

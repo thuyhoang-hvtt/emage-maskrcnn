@@ -226,7 +226,7 @@ def train(model):
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
                 epochs=10,
-                layers='heads')
+                layers='3+')
 
 
 def color_splash(image, mask):
@@ -357,7 +357,7 @@ if __name__ == '__main__':
             # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
             GPU_COUNT = 1
             IMAGES_PER_GPU = 1
-
+            BACKBONE = args.backbone
 
         config = InferenceConfig()
     config.display()
@@ -390,11 +390,11 @@ if __name__ == '__main__':
     if args.weights.lower() == "coco":
         # Exclude the last layers because they require a matching
         # number of classes
-        model.load_weights(weights_path, by_name=True, exclude=[
+        model.load_weights(weights_path, by_name=False, exclude=[
             "mrcnn_class_logits", "mrcnn_bbox_fc",
             "mrcnn_bbox", "mrcnn_mask"])
     else:
-        model.load_weights(weights_path, by_name=True)
+        model.load_weights(weights_path, by_name=False)
 
     # Train or evaluate
     if args.command == "train":
