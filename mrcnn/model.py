@@ -213,7 +213,7 @@ def resnet_graph(input_image, architecture, stage5=False, train_bn=True):
 #  DenseNet Graph
 ############################################################
 
-def dense_conv(input_tensor, growth_rate, stage, block, use_bias=False, train_bn=True):
+def dense_conv(input_tensor, growth_rate, name, use_bias=False, train_bn=True):
     """
     :param input_tensor:
     :param growth_rate:
@@ -223,24 +223,21 @@ def dense_conv(input_tensor, growth_rate, stage, block, use_bias=False, train_bn
     :param train_bn:
     :return:
     """
-    conv_name_base = 'conv' + str(stage) + '_' + str(block) + '_branch'
-    relu_name_base = 'relu' + str(stage) + '_' + str(block) + '_branch'
-    bn_name_base = 'bn' + str(stage) + '_' + str(block) + '_branch'
 
-    x = BatchNorm(name=bn_name_base + '_a')(input_tensor, training=train_bn)
-    x = KL.Activation('relu', name=relu_name_base)(x)
+    x = BatchNorm(name=name + '_0_bn')(input_tensor, training=train_bn)
+    x = KL.Activation('relu', name=name + '_0_relu')(x)
     # This is 1x1 bottleneck with 4 * k output features map
-    x = KL.Conv2D(4 * growth_rate, (1, 1), use_bias=use_bias, name=conv_name_base + '_a')(x)
+    x = KL.Conv2D(4 * growth_rate, (1, 1), use_bias=use_bias, name=name + '_1_conv')(x)
 
-    x = BatchNorm(name=bn_name_base + '_b')(x, training=train_bn)
-    x = KL.Activation('relu', name=relu_name_base + '_b', )(x)
-    x = KL.Conv2D(growth_rate, (3, 3), padding='same', use_bias=use_bias, name=conv_name_base + '_b')(x)
+    x = BatchNorm(name=name + '_1_bn')(x, training=train_bn)
+    x = KL.Activation('relu', name=name + '_1_relu')(x)
+    x = KL.Conv2D(growth_rate, (3, 3), padding='same', use_bias=use_bias, name=name + '_2_conv')(x)
 
-    x = KL.Concatenate(name='concat{}_{}'.format(stage, block))([x, input_tensor])
+    x = KL.Concatenate(name=name + '_concat')([x, input_tensor])
 
     return x
 
-def dense_transition(input_tensor, stage, compression, use_bias=False, train_bn=True):
+def dense_transition(input_tensor, compression, name, use_bias=False, train_bn=True):
     """
     :param input_tensor:
     :param compression:
@@ -249,35 +246,34 @@ def dense_transition(input_tensor, stage, compression, use_bias=False, train_bn=
     :param train_bn:
     :return:
     """
-    conv_name_base = 'conv' + str(stage) + '_trainsition'
-    relu_name_base = 'relu' + str(stage) + '_trainsition'
-    bn_name_base = 'bn' + str(stage) + '_trainsition'
-    pool_name_base = 'avg_pool' + str(stage) + '_trainsition'
 
-    x = BatchNorm(name=bn_name_base)(input_tensor, training=train_bn)
-    x = KL.Activation('relu', name=relu_name_base)(x)
-    x = KL.Conv2D(int(compression * K.int_shape(input_tensor)[-1]), (1, 1), use_bias=use_bias, name=conv_name_base)(x)
+    x = BatchNorm(name=name + '_bn')(input_tensor, training=train_bn)
+    x = KL.Activation('relu', name=name + '_relu')(x)
+    x = KL.Conv2D(int(compression * K.int_shape(input_tensor)[-1]), (1, 1), use_bias=use_bias, name=name + '_conv')(x)
 
-    x = KL.AveragePooling2D(2, strides=2, name=pool_name_base)(x)
+    x = KL.AveragePooling2D(2, strides=2, name=name + '_pool')(x)
 
     return x
 
 
 
-def dense_block(input, layers, stage, growth_rate, use_bias=False, train_bn=True):
+def dense_block(input, layers, growth_rate, name, use_bias=False, train_bn=True):
     """
     :param input:
     :param layers:
-    :param stage:
     :param growth_rate:
+    :param name:
     :param use_bias:
     :param train_bn:
     :return:
     """
     x = input
     for i in range(layers):
-        block = chr(71 + i) if 65 + i > 90 else chr(65 + i)
-        x = dense_conv(x, growth_rate, stage, block, use_bias, train_bn)
+        x = dense_conv(input_tensor=x,
+                       growth_rate=growth_rate,
+                       name=name + '_block' + str(i + 1),
+                       use_bias=use_bias,
+                       train_bn=train_bn)
 
     return x
 
@@ -293,23 +289,28 @@ def dense_graph(input_image, architecture, blocks, growth_rate, compression=0.5,
     :param train_bn:
     :return:
     """
-    assert  architecture in ["densenet121", "densenet169", "densenet201"]
+    assert architecture in ["densenet121", "densenet169", "densenet201"]
 
     # Stage 1
     x = KL.ZeroPadding2D(padding=((3, 3), (3, 3)))(input_image)
-    x = KL.Conv2D(64, 7, strides=2, use_bias=use_bias, name="conv1")(x)
-    x = BatchNorm(name="bn_conv1")(x, training=train_bn)
-    x = KL.Activation('relu', name='relu_conv1')(x)
+    x = KL.Conv2D(64, 7, strides=2, use_bias=use_bias, name="conv1/conv")(x)
+    x = BatchNorm(name="conv1/bn")(x, training=train_bn)
+    x = KL.Activation('relu', name='conv1/relu')(x)
     x = KL.ZeroPadding2D(padding=((1, 1), (1, 1)))(x)
     x = KL.MaxPooling2D(3, strides=2, name='pool1')(x)
 
     C = [x]
     # Stage 2-5
     for idx, nb_layers in enumerate(blocks):
-        x = dense_block(x, nb_layers, idx + 2, growth_rate)
-        C.append(x)
+        x = dense_block(input=x, layers=nb_layers, name='conv' + str(idx + 2), growth_rate=growth_rate)
+
         if idx != len(blocks) - 1:
-            x = dense_transition(x, idx + 2, compression)
+            C.append(x)
+            x = dense_transition(input_tensor=x, compression=compression, name='pool' + str(idx + 2))
+
+    x = BatchNorm(name='bn')(x, train_bn=train_bn)
+    x = KL.Activation('relu', name='relu')(x)
+    C.append(x)
 
     return C
 
