@@ -308,7 +308,7 @@ def dense_graph(input_image, architecture, blocks, growth_rate, compression=0.5,
             C.append(x)
             x = dense_transition(input_tensor=x, compression=compression, name='pool' + str(idx + 2))
 
-    x = BatchNorm(name='bn')(x, train_bn=train_bn)
+    x = BatchNorm(name='bn')(x, training=train_bn)
     x = KL.Activation('relu', name='relu')(x)
     C.append(x)
 
